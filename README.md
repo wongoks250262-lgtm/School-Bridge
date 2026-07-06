@@ -1,2 +1,1139 @@
 # School-Bridge
 안산시 다문화 학생들을 위한 스쿨 브릿지
+git branch -M main
+
+# 2. 내 컴퓨터와 방금 만든 깃허브 저장소(주소)를 연결
+# (아래 주소 중 '여러분의아이디' 부분을 실제 깃허브 ID로 변경해주세요)
+git remote add origin https://github.com/wongok.s250262/school-bridge.git
+
+# 3. 최종 코드를 깃허브에 전송(업로드)하기
+git push -u origin main
+
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Compass, 
+  Languages, 
+  BookMarked, 
+  MessageSquare, 
+  MapPin, 
+  User, 
+  Bell, 
+  Search, 
+  Send, 
+  CheckCircle, 
+  Info, 
+  Phone, 
+  RefreshCw, 
+  Smile, 
+  TrendingUp, 
+  BookOpen, 
+  Check, 
+  Map, 
+  Sparkles,
+  HelpCircle,
+  FileText
+} from 'lucide-react';
+
+// 안산시 공공데이터포털(데이터셋 ID: 3069669) 기반 실제 행정동별 내국인 및 외국인 현황 데이터 정제본
+const ANSAN_DEMOGRAPHICS = [
+  { dong: "원곡동", nativeMale: 2680, nativeFemale: 2641, foreignMale: 7420, foreignFemale: 6522, defaultLang: "zh", recommendation: "중국어/베트남어" },
+  { dong: "선부2동", nativeMale: 6204, nativeFemale: 5900, foreignMale: 2180, foreignFemale: 1940, defaultLang: "ru", recommendation: "러시아어/우즈베크어" },
+  { dong: "와동", nativeMale: 19650, nativeFemale: 18751, foreignMale: 2010, foreignFemale: 1880, defaultLang: "vi", recommendation: "베트남어" },
+  { dong: "사동", nativeMale: 17804, nativeFemale: 17410, foreignMale: 1650, foreignFemale: 1530, defaultLang: "ru", recommendation: "러시아어" },
+  { dong: "선부1동", nativeMale: 9150, nativeFemale: 8850, foreignMale: 1420, foreignFemale: 1380, defaultLang: "vi", recommendation: "베트남어/영어" },
+  { dong: "신길동", nativeMale: 10920, nativeFemale: 10511, foreignMale: 1510, foreignFemale: 1440, defaultLang: "zh", recommendation: "중국어" },
+  { dong: "초지동", nativeMale: 26202, nativeFemale: 25700, foreignMale: 1251, foreignFemale: 1230, defaultLang: "en", recommendation: "영어/베트남어" }
+];
+
+const ANSAN_CENTERS = [
+  {
+    id: 1,
+    name: "안산시 다문화가족지원센터",
+    type: "다문화지원",
+    address: "경기도 안산시 단원구 원초로 76",
+    phone: "031-501-0033",
+    lat: 37.3195,
+    lng: 126.8124,
+    desc: "다문화가족을 위한 무료 한국어 교실, 결혼이민자 통번역 서비스, 정착 적응 교육"
+  },
+  {
+    id: 2,
+    name: "안산시 외국인주민지원센터",
+    type: "행정/권익",
+    address: "경기도 안산시 단원구 부부로 43",
+    phone: "031-481-3730",
+    lat: 37.3238,
+    lng: 126.7915,
+    desc: "외국인 근로자 및 다문화 주민 고충 생활 상담, 통역 지원, 무료 진료소 정보 제공"
+  },
+  {
+    id: 3,
+    name: "안산시 다문화청소년글로벌센터",
+    type: "교육지원",
+    address: "경기도 안산시 단원구 다문화길 16",
+    phone: "031-493-2661",
+    lat: 37.3262,
+    lng: 126.7901,
+    desc: "다문화 중도입국 아동·청소년의 학교 편입학 상담, 기초 한국어 및 학교생활 지도"
+  },
+  {
+    id: 4,
+    name: "단원구 다문화 아동 맞춤 교실",
+    type: "교육지원",
+    address: "경기도 안산시 단원구 선부광장로 27",
+    phone: "031-481-6345",
+    lat: 37.3331,
+    lng: 126.8098,
+    desc: "방과 후 학교 숙제 도우미, 교과 기초 개념 보충, 친밀감 형성을 위한 한국 문화 탐구"
+  }
+];
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState('home'); // home, demographics, translate, dictionary, map, chat, teacher
+  const [selectedDong, setSelectedDong] = useState('원곡동');
+  const [selectedLang, setSelectedLang] = useState('zh'); // zh, vi, en, ru, uz
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [tempApiKey, setTempApiKey] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // 공지사항 로컬 보관함 (가상 DB 역할 및 실시간 피드)
+  const [announcements, setAnnouncements] = useState([
+    {
+      id: 1,
+      title: "🏫 다문화 가정 합동 학부모 공개수업 안내",
+      simplified: "7월 15일 아침 10시에 학교에 오셔서 우리 아이들이 공부하는 교실을 구경하고 응원해주세요. 간편하고 편한 옷차림으로 오시면 됩니다.",
+      summary: "1. 날짜: 7월 15일 (수) 오전 10시\n2. 장소: 각 학급 교실\n3. 대상: 모든 다문화 학부모님",
+      translated: "🏫 关于举办多元文化家庭联合家长公开课의 안내:\n7月15日上午10点请来学校参观孩子们学习的教室并为他们加油。穿戴整洁便装即可。",
+      dong: "원곡동",
+      langCode: "zh",
+      createdAt: "방금 전"
+    },
+    {
+      id: 2,
+      title: "🎒 방학 중 무료 한국어 멘토링 교실 신청",
+      simplified: "여름방학 동안 대학생 형, 누나들과 학교에서 무료로 한국어 책도 읽고 숙제도 같이 하는 수업을 신청하세요.",
+      summary: "1. 모집 대상: 한국어 도움이 필요한 학생\n2. 운영 기간: 여름방학 중 (4주)\n3. 참가 비용: 전액 무료",
+      translated: "🎒 Đăng ký lớp học cố vấn tiếng Hàn miễn phí trong kỳ nghỉ:\nĐăng ký lớp học cùng các anh chị sinh viên đọc sách tiếng Hàn và làm bài tập miễn phí tại trường trong kỳ nghỉ hè.",
+      dong: "와동",
+      langCode: "vi",
+      createdAt: "1시간 전"
+    }
+  ]);
+
+  // 번역/쉬운한글 상태
+  const [inputText, setInputText] = useState('');
+  const [easyKoreanResult, setEasyKoreanResult] = useState('');
+  const [translatedResult, setTranslatedResult] = useState('');
+
+  // 학교 용어 사전 상태
+  const [dictQuery, setDictQuery] = useState('');
+  const [dictResult, setDictResult] = useState(null);
+
+  // 위치 기반 가상 내 위치 및 정렬된 지원센터
+  const [userLocation, setUserLocation] = useState({ lat: 37.3255, lng: 126.7932 }); // 안산 다문화 광장 부근
+  const [sortedCenters, setSortedCenters] = useState([]);
+
+  // AI 챗봇 상태
+  const [chatInput, setChatInput] = useState('');
+  const [chatHistory, setChatHistory] = useState([
+    { role: 'assistant', text: '안산의 모든 학교 친구들 반가워요! 🌟 저는 여러분의 친절한 학교 도우미 다문화 선생님이랍니다. 어려운 알림장 내용, 숙제, 교과서 내용 혹은 한국 생활 규칙 등 궁금한 점이 있다면 무엇이든 편하게 한국어나 모국어로 질문해 주세요!' }
+  ]);
+
+  // 교사용 에디터 상태
+  const [teacherNotice, setTeacherNotice] = useState('');
+  const [compiledNotice, setCompiledNotice] = useState(null);
+
+  const langNames = {
+    zh: '中文 (중국어)',
+    vi: 'Tiếng Việt (베트남어)',
+    en: 'English (영어)',
+    ru: 'Русский (러시아어)',
+    uz: 'Oʻzbekcha (우즈베크어)'
+  };
+
+  // 동이 선택될 때마다 Smart Default Rule 적용
+  useEffect(() => {
+    const currentDongData = ANSAN_DEMOGRAPHICS.find(d => d.dong === selectedDong);
+    if (currentDongData) {
+      setSelectedLang(currentDongData.defaultLang);
+    }
+  }, [selectedDong]);
+
+  // 하버사인 거리 계산
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // 지구 반지름
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return parseFloat((R * c).toFixed(2));
+  };
+
+  useEffect(() => {
+    const calculated = ANSAN_CENTERS.map(center => {
+      const distance = calculateDistance(userLocation.lat, userLocation.lng, center.lat, center.lng);
+      return { ...center, distance };
+    });
+    setSortedCenters(calculated.sort((a, b) => a.distance - b.distance));
+  }, [userLocation]);
+
+  // GPS 내 위치 조회 기능
+  const requestMyLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        () => {
+          setErrorMsg("실제 위치 정보를 수신하지 못했습니다. 안산 다문화 광장 근처의 시뮬레이션 위치로 탐색합니다.");
+        }
+      );
+    } else {
+      setErrorMsg("이 브라우저에서는 위치 서비스를 지원하지 않습니다.");
+    }
+  };
+
+  // Gemini API 비동기 전송
+  const callGeminiAPI = async (prompt, systemInstruction = "") => {
+    const activeKey = apiKey || ""; // 만약 API 키가 비어있으면 백엔드 폴백 적용
+    const model = "gemini-2.5-flash-preview-09-2025";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`;
+    
+    const payload = {
+      contents: [{ parts: [{ text: prompt }] }],
+      ...(systemInstruction ? { systemInstruction: { parts: [{ text: systemInstruction }] } } : {})
+    };
+
+    let delay = 1000;
+    for (let i = 0; i < 4; i++) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          return result.candidates?.[0]?.content?.parts?.[0]?.text || "결과를 로딩하지 못했습니다.";
+        } else {
+          const errData = await response.json();
+          if (errData.error?.message?.includes("API key not valid")) {
+            throw new Error("올바르지 않은 API Key입니다. 우측 상단의 API 설정 아이콘을 눌러 실사용 키를 입력해주세요!");
+          }
+        }
+      } catch (err) {
+        if (i === 3 || err.message.includes("API Key")) throw err;
+        await new Promise(res => setTimeout(res, delay));
+        delay *= 2;
+      }
+    }
+    throw new Error("서버와의 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.");
+  };
+
+  // AI 쉬운 한국어 + 다국어 통합 번역 처리
+  const handleTranslateAndSimplify = async () => {
+    if (!inputText.trim()) return;
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const simplifiedPrompt = `다음 공지사항 또는 문장을 '초등학교 1학년 어린이'도 한 번에 알아들을 수 있는 직관적이고 다정한 한국어 한두 문장으로 고쳐줘: "${inputText}"`;
+      const simplifiedInstruction = "너는 친절하고 똑똑한 초등학교 교사야. 격식체나 한자식 표현을 완전히 배제하고, '동사 위주의 쉬운 행동 요령'으로 문장을 짧게 요약 다듬어야 해. 결과물만 부드러운 말투로 출력해줘.";
+      const easyResult = await callGeminiAPI(simplifiedPrompt, simplifiedInstruction);
+      setEasyKoreanResult(easyResult);
+
+      const targetLangName = langNames[selectedLang];
+      const translationPrompt = `다음 문장을 다문화 학생과 학부모가 명확히 인지할 수 있도록 존댓말을 갖춰 ${targetLangName}로 완벽하게 번역해줘: "${inputText}"`;
+      const translationInstruction = "너는 다문화 교육 전문가이자 자연스러운 인간 전문 통역사야. 직역하지 말고 정중하고 친근하게 의미 중심의 다문화 맞춤 번역 결과만 노출해줘.";
+      const transResult = await callGeminiAPI(translationPrompt, translationInstruction);
+      setTranslatedResult(transResult);
+    } catch (err) {
+      setErrorMsg(err.message || "변환 작업 중 문제가 생겼습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 학교 용어 돋보기 기능
+  const handleDictionaryLookup = async () => {
+    if (!dictQuery.trim()) return;
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const prompt = `학습 단어: "${dictQuery}"
+
+다음 형식에 맞게 정확히 JSON 포맷으로 설명해줘. 설명은 초등학생 눈높이어야 해. 다른 인삿말이나 부가 텍스트는 절대 포함하면 안돼:
+{
+  "word": "${dictQuery}",
+  "koreanExplanation": "어려운 학업/행정 한자어를 초등학생도 쏙쏙 이해할 수 있도록 알기 쉽게 풀이한 설명",
+  "translatedExplanation": "위 한국어 설명을 그대로 ${langNames[selectedLang]}로 번역한 텍스트",
+  "exampleSentence": "이 단어가 들어간 실제 친근한 학교생활 예문 하나"
+}`;
+      const systemInstruction = "너는 교육 지식 사전 빌더야. 반드시 출력값은 순수한 JSON 데이터여야 해. 코드블록 마크다운도 포함하지마.";
+      const rawJson = await callGeminiAPI(prompt, systemInstruction);
+      const cleanJson = rawJson.replace(/```json/gi, "").replace(/```/gi, "").trim();
+      
+      const parsed = JSON.parse(cleanJson);
+      setDictResult(parsed);
+    } catch (err) {
+      setErrorMsg("용어 풀이 도중 일시적 오류가 생겼습니다. 서술형 답변으로 시도합니다.");
+      try {
+        const textPrompt = `"${dictQuery}"에 대해 초등학교 1학년이 이해할 수 있도록 재미있게 설명해주고, ${langNames[selectedLang]}로 번역한 내용도 덧붙여줘.`;
+        const textReply = await callGeminiAPI(textPrompt);
+        setDictResult({
+          word: dictQuery,
+          koreanExplanation: textReply,
+          translatedExplanation: "통합 해석 처리 완료",
+          exampleSentence: "선생님의 안내사항과 교과서를 꼼꼼히 보아요!"
+        });
+      } catch (fallbackErr) {
+        setErrorMsg("API 호출이 막혀있거나 연결 문제일 수 있습니다. 우측 상단 키 입력을 확인해 주세요.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!chatInput.trim()) return;
+    const currentInput = chatInput;
+    setChatInput('');
+    setChatHistory(prev => [...prev, { role: 'user', text: currentInput }]);
+    setLoading(true);
+
+    try {
+      const dialogString = chatHistory.map(item => `${item.role === 'user' ? '학생' : '선생님'}: ${item.text}`).join('\n');
+      const prompt = `${dialogString}\n학생: ${currentInput}\n\n위 대화에 이어, 다문화 학생을 포용하는 온화한 한국 학교 선생님 페르소나로 자상하고 편안하게 위로와 가이드라인을 담아 답변해줘. 문장은 너무 어렵지 않게 짧게 조각내서 적어줘.`;
+      
+      const reply = await callGeminiAPI(prompt, "너는 다문화 학생의 마음을 포근하게 어루만져 주는 한국 학교의 담임 선생님이야.");
+      setChatHistory(prev => [...prev, { role: 'assistant', text: reply }]);
+    } catch (err) {
+      setErrorMsg("답변 연결 중 지연이 생겼습니다. API 설정 상태를 점검해주세요.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTeacherCompile = async () => {
+    if (!teacherNotice.trim()) return;
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const prompt = `원본 공지사항: "${teacherNotice}"
+
+이 내용을 바탕으로 아래의 JSON 스키마 구조와 완전히 일치하도록 결과물을 완성해줘. 다른 군더더기 텍스트는 절대 붙이지마:
+{
+  "title": "공모전 가치에 어울리는 따뜻하고 명확한 제목 한 줄",
+  "simplified": "초등학교 저학년 및 중도 입국 학생의 눈높이에 최적화된 쉬운 한국어 3줄 설명",
+  "summary": "핵심 일정, 준비물, 기한을 명료하게 목록화한 요약 (예: 1. 날짜.. 2. 준비물..)",
+  "translated": "위 요약 내용 전체를 ${langNames[selectedLang]}로 완전하게 대역 번역한 텍스트"
+}`;
+
+      const systemInstruction = "너는 교직원을 정교하게 보조해 공지사항을 가공하는 AI 시스템 전문가야. 오직 완벽한 구조의 JSON만 출력해야 해.";
+      const rawResponse = await callGeminiAPI(prompt, systemInstruction);
+      const cleanJson = rawResponse.replace(/```json/gi, "").replace(/```/gi, "").trim();
+      
+      const parsed = JSON.parse(cleanJson);
+      setCompiledNotice(parsed);
+
+      // 교사 공지사항 리스트에 임시 등록하여 "실시간 피드"에 연동
+      const newAnnouncement = {
+        id: Date.now(),
+        title: parsed.title,
+        simplified: parsed.simplified,
+        summary: parsed.summary,
+        translated: parsed.translated,
+        dong: selectedDong,
+        langCode: selectedLang,
+        createdAt: "방금 전"
+      };
+
+      setAnnouncements(prev => [newAnnouncement, ...prev]);
+    } catch (err) {
+      setErrorMsg("공지사항 변환에 실패했습니다. 형식 오류 혹은 네트워크 제한입니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 antialiased selection:bg-blue-100 selection:text-blue-900 pb-20">
+      
+      {/* 글로벌 탑바 */}
+      <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm transition-all duration-300">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div 
+            onClick={() => setActiveTab('home')} 
+            className="flex items-center space-x-2.5 cursor-pointer hover:opacity-90 active:scale-98 transition-transform"
+          >
+            <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-sky-400 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
+              <Compass className="w-5.5 h-5.5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-1">
+                <span className="text-lg font-black tracking-tight text-slate-900">School Bridge</span>
+                <span className="bg-blue-50 text-blue-700 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase border border-blue-100">Ansan</span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-bold block">안산시 공공데이터 X 다문화 교육 상생 앱</span>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            {/* 행정동 셀렉터 - Smart Default의 시작점 */}
+            <div className="flex items-center space-x-1 bg-slate-50 border border-slate-200/80 rounded-xl py-1 px-2.5">
+              <MapPin className="w-3.5 h-3.5 text-blue-500" />
+              <select 
+                value={selectedDong}
+                onChange={(e) => setSelectedDong(e.target.value)}
+                className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none"
+              >
+                {ANSAN_DEMOGRAPHICS.map(d => (
+                  <option key={d.dong} value={d.dong}>{d.dong}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* API 설정 플로팅 버튼 */}
+            <button
+              onClick={() => {
+                setTempApiKey(apiKey);
+                setIsApiKeyModalOpen(true);
+              }}
+              className={`p-2 rounded-xl transition-all relative ${apiKey ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-rose-50 text-rose-500 hover:bg-rose-100 animate-pulse'}`}
+              title="Gemini API 키 설정"
+            >
+              <Sparkles className="w-4 h-4" />
+              {!apiKey && (
+                <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* 메인 뷰포트 바디 */}
+      <main className="flex-1 max-w-4xl w-full mx-auto p-4 space-y-6">
+
+        {/* API 키 상태 배너 알림 */}
+        {!apiKey && (
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm animate-fade-in">
+            <div className="flex items-start space-x-3">
+              <div className="p-2 bg-amber-500/10 text-amber-600 rounded-xl mt-0.5 sm:mt-0">
+                <Info className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-800">잠시만요! AI 실시간 기능을 이용해 볼까요?</h4>
+                <p className="text-xs text-slate-500 mt-1">이 웹앱의 AI 번역, 용어 돋보기, 교사 오토파일럿 등 핵심 기능은 Gemini 실시간 동적 호출로 작동합니다.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsApiKeyModalOpen(true)}
+              className="bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-md shadow-amber-100 transition-all self-stretch sm:self-auto text-center"
+            >
+              실제 API 키 등록하기
+            </button>
+          </div>
+        )}
+
+        {/* --- 탭 1: 대시보드 (홈) --- */}
+        {activeTab === 'home' && (
+          <div className="space-y-6">
+            
+            {/* 히어로 비주얼 배너 */}
+            <div className="bg-gradient-to-br from-blue-600 via-blue-500 to-sky-400 rounded-3xl p-6 text-white shadow-xl shadow-blue-100 relative overflow-hidden">
+              <div className="relative z-10 max-w-lg">
+                <span className="inline-block bg-white/20 backdrop-blur-md text-white text-[10px] font-black px-3 py-1 rounded-full mb-3 uppercase tracking-wider">
+                  안산시 다문화 맞춤 스마트 시스템
+                </span>
+                <h1 className="text-2xl md:text-3xl font-black mb-2.5 leading-tight">
+                  말과 마음을 이어주는<br />스쿨 브릿지가 있습니다!
+                </h1>
+                <p className="text-blue-50 text-xs md:text-sm font-medium leading-relaxed opacity-95">
+                  한국어가 아직 낯선 아이들도, 학교 통신문이 어려운 학부모님도, 학생 한 명 한 명을 사랑하는 교사 선생님까지 모두 함께 소통하는 디지털 징검다리입니다.
+                </p>
+                
+                {/* 스마트 추천 안내판 */}
+                <div className="mt-5 inline-flex items-center space-x-2 bg-black/10 backdrop-blur-sm px-3.5 py-1.5 rounded-2xl border border-white/15 text-xs font-bold">
+                  <Languages className="w-4 h-4 text-sky-200" />
+                  <span>현재 감지된 {selectedDong} 지역은 <span className="text-yellow-200 font-extrabold">{langNames[selectedLang]}</span>가 주로 우선 추천됩니다.</span>
+                </div>
+              </div>
+              <div className="absolute -right-6 -bottom-6 opacity-10 transform rotate-12 pointer-events-none">
+                <Compass className="w-72 h-72" />
+              </div>
+            </div>
+
+            {/* 실시간 알림 피드 (교사 모드와 실시간 양방향 연동됨) */}
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center space-x-2">
+                  <span className="flex h-2.5 w-2.5 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                  </span>
+                  <h3 className="font-black text-slate-800 text-sm">우리 학교 다문화 실시간 알림장</h3>
+                </div>
+                <span className="text-[10px] text-slate-400 font-bold">최신 공지 실시간 상태</span>
+              </div>
+
+              <div className="space-y-4">
+                {announcements.map((item) => (
+                  <div key={item.id} className="bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-2xl p-4 transition duration-200">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="bg-blue-100 text-blue-700 font-bold text-[9px] px-2 py-0.5 rounded-full">
+                          {item.dong} 소속
+                        </span>
+                        <span className="bg-purple-100 text-purple-700 font-bold text-[9px] px-2 py-0.5 rounded-full">
+                          {langNames[item.langCode]} 대역
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono font-bold">{item.createdAt}</span>
+                    </div>
+
+                    <h4 className="font-bold text-slate-800 text-sm">{item.title}</h4>
+                    
+                    {/* 3단 세련된 아코디언식 분류 */}
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 pt-2.5 border-t border-slate-200/50 text-xs">
+                      <div>
+                        <span className="text-[10px] font-black text-blue-500 block mb-1">쉽고 맑은 한글</span>
+                        <p className="text-slate-600 font-semibold leading-relaxed">{item.simplified}</p>
+                      </div>
+                      <div className="bg-amber-50/50 p-2.5 rounded-xl border border-amber-100/50">
+                        <span className="text-[10px] font-black text-amber-700 block mb-1">한눈에 핵심요약</span>
+                        <p className="text-slate-700 font-medium leading-relaxed whitespace-pre-line">{item.summary}</p>
+                      </div>
+                      <div className="bg-purple-50/40 p-2.5 rounded-xl border border-purple-100/40">
+                        <span className="text-[10px] font-black text-purple-700 block mb-1">{langNames[item.langCode]} 번역</span>
+                        <p className="text-slate-700 font-medium leading-relaxed">{item.translated}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 메인 모듈 바로가기 그리드 */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <button 
+                onClick={() => setActiveTab('demographics')}
+                className="bg-white p-5 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-lg hover:-translate-y-0.5 active:scale-98 transition-all duration-300 text-left flex flex-col justify-between h-36 group"
+              >
+                <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl w-10 h-10 flex items-center justify-center font-bold">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-xs sm:text-sm group-hover:text-blue-600 transition">데이터 시각화</h3>
+                  <p className="text-slate-400 text-[10px] mt-1 font-semibold">안산 3069669 공공데이터</p>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('translate')}
+                className="bg-white p-5 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-lg hover:-translate-y-0.5 active:scale-98 transition-all duration-300 text-left flex flex-col justify-between h-36 group"
+              >
+                <div className="p-2.5 bg-sky-50 text-sky-600 rounded-xl w-10 h-10 flex items-center justify-center">
+                  <Languages className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-xs sm:text-sm group-hover:text-blue-600 transition">다국어 안심 번역</h3>
+                  <p className="text-slate-400 text-[10px] mt-1 font-semibold">쉬운 한글 & 대역 번역기</p>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('dictionary')}
+                className="bg-white p-5 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-lg hover:-translate-y-0.5 active:scale-98 transition-all duration-300 text-left flex flex-col justify-between h-36 group"
+              >
+                <div className="p-2.5 bg-green-50 text-green-600 rounded-xl w-10 h-10 flex items-center justify-center">
+                  <BookMarked className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-xs sm:text-sm group-hover:text-blue-600 transition">학교 용어 사전</h3>
+                  <p className="text-slate-400 text-[10px] mt-1 font-semibold">학업/행정 어려운 용어 돋보기</p>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('chat')}
+                className="bg-white p-5 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-lg hover:-translate-y-0.5 active:scale-98 transition-all duration-300 text-left flex flex-col justify-between h-36 group"
+              >
+                <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl w-10 h-10 flex items-center justify-center">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-xs sm:text-sm group-hover:text-blue-600 transition">AI 학습 도우미</h3>
+                  <p className="text-slate-400 text-[10px] mt-1 font-semibold">따뜻한 AI 담임 선생님 대화</p>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('map')}
+                className="bg-white p-5 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-lg hover:-translate-y-0.5 active:scale-98 transition-all duration-300 text-left flex flex-col justify-between h-36 group"
+              >
+                <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl w-10 h-10 flex items-center justify-center">
+                  <MapPin className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-xs sm:text-sm group-hover:text-blue-600 transition">지원 센터 찾기</h3>
+                  <p className="text-slate-400 text-[10px] mt-1 font-semibold">사용자 GPS 연계 실시간 매핑</p>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('teacher')}
+                className="bg-gradient-to-br from-indigo-50/70 to-purple-50/70 p-5 rounded-2xl border border-indigo-100 hover:border-indigo-300 hover:shadow-lg hover:-translate-y-0.5 active:scale-98 transition-all duration-300 text-left flex flex-col justify-between h-36 group"
+              >
+                <div className="p-2.5 bg-indigo-600 text-white rounded-xl w-10 h-10 flex items-center justify-center">
+                  <User className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="bg-indigo-100 text-indigo-700 text-[9px] font-black px-1.5 py-0.5 rounded inline-block mb-1">교직원 전용</span>
+                  <h3 className="font-black text-slate-800 text-xs sm:text-sm group-hover:text-indigo-600 transition">알림장 자동 패키징</h3>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* --- 탭 2: 안산 공공데이터 통계 익스플로러 --- */}
+        {activeTab === 'demographics' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center space-x-2.5 mb-2">
+                <span className="w-1.5 h-6 bg-blue-600 rounded-full inline-block"></span>
+                <h2 className="text-lg font-black text-slate-900">안산시 다문화 인구 분포 지도 탐색기</h2>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed mb-6">
+                공공데이터(내국인 및 외국인 현황)의 실시간 정밀 통계 지표입니다. 안산시 특정 동네의 다문화 비율을 한눈에 비교하고, 이 수치가 다문화 서비스 구축에 얼마나 필수적인 행정 지표인지 직접 분석해보세요.
+              </p>
+
+              {/* 통계 시각화 그래프 영역 */}
+              <div className="space-y-4">
+                {ANSAN_DEMOGRAPHICS.map(d => {
+                  const totalNative = d.nativeMale + d.nativeFemale;
+                  const totalForeign = d.foreignMale + d.foreignFemale;
+                  const totalPop = totalNative + totalForeign;
+                  const foreignRatio = parseFloat(((totalForeign / totalPop) * 100).toFixed(1));
+
+                  return (
+                    <div 
+                      key={d.dong} 
+                      onClick={() => {
+                        setSelectedDong(d.dong);
+                        setSelectedLang(d.defaultLang);
+                      }}
+                      className={`border p-4 rounded-2xl transition duration-200 cursor-pointer ${selectedDong === d.dong ? 'bg-blue-50/40 border-blue-200 shadow-sm' : 'border-slate-100 hover:bg-slate-50'}`}
+                    >
+                      <div className="flex justify-between items-center mb-2">
+                        <div>
+                          <span className="font-extrabold text-sm text-slate-800">{d.dong}</span>
+                          <span className="text-[11px] text-slate-400 font-bold ml-2">전체인구 {totalPop.toLocaleString()}명</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs font-black text-blue-600">외국인 비율 {foreignRatio}%</span>
+                        </div>
+                      </div>
+
+                      {/* 맞춤형 가로 막대 그래프 */}
+                      <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex">
+                        <div 
+                          className="bg-blue-500 h-full transition-all duration-500" 
+                          style={{ width: `${100 - foreignRatio}%` }}
+                          title={`내국인: ${totalNative.toLocaleString()}명`}
+                        ></div>
+                        <div 
+                          className="bg-gradient-to-r from-orange-400 to-rose-400 h-full transition-all duration-500" 
+                          style={{ width: `${foreignRatio}%` }}
+                          title={`외국인: ${totalForeign.toLocaleString()}명`}
+                        ></div>
+                      </div>
+
+                      <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold mt-2">
+                        <span>내국인: {totalNative.toLocaleString()}명</span>
+                        <span className="text-orange-500">외국인: {totalForeign.toLocaleString()}명 (우세언어: {d.recommendation})</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 통계 데이터 인사이트 박스 */}
+              <div className="mt-6 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-start space-x-3 text-xs leading-relaxed">
+                <span className="text-blue-600 text-lg font-black mt-0.5">💡</span>
+                <div>
+                  <h4 className="font-black text-blue-900 mb-1">스마트 매핑 설계 아이디어 (Smart Defaults)</h4>
+                  <p className="text-slate-600 font-semibold">
+                    예컨대, 학부모가 소속 행정동을 원곡동으로 설정하면 시스템이 외국인 비율(72.4%) 데이터를 인지하고 기본 타깃 언어를 중국어로 선점합니다. 이와 같이 수작업 설정 번거로움을 줄이는 데이터 기반 AI 서비스가 학교 현장에 제공됩니다.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- 탭 3: AI 쉬운 한국어 변환 & 다국어 번역기 --- */}
+        {activeTab === 'translate' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center space-x-2.5 mb-2">
+                <span className="w-1.5 h-6 bg-sky-500 rounded-full inline-block"></span>
+                <h2 className="text-lg font-black text-slate-900">다문화가정 안심 통번역 센터</h2>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                학교에서 온 복잡한 격식체 안내장 문구를 아이들의 언어 수준과 다문화 학부모의 자국어 언어로 동시에 정교하게 변환합니다.
+              </p>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-600">선택된 감지 언어: <strong className="text-blue-600">{langNames[selectedLang]}</strong></span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs text-slate-400 font-bold">언어 변경:</span>
+                    <select 
+                      value={selectedLang} 
+                      onChange={(e) => setSelectedLang(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-semibold focus:outline-none"
+                    >
+                      {Object.entries(langNames).map(([code, name]) => (
+                        <option key={code} value={code}>{name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <textarea
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder="예시: 우천 시 운동장 야외 활동은 체육관 실내 레크리에이션 수업으로 대체하여 정상 진행 예정이오니 참고하시기 바랍니다."
+                  className="w-full min-h-[110px] p-4 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-400 text-sm font-semibold text-slate-700"
+                />
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleTranslateAndSimplify}
+                    disabled={loading || !inputText.trim()}
+                    className="bg-sky-500 hover:bg-sky-600 disabled:bg-sky-200 text-white font-black py-2.5 px-6 rounded-xl text-xs flex items-center space-x-2 shadow-md shadow-sky-100 transition-all active:scale-95"
+                  >
+                    {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Smile className="w-4.5 h-4.5" />}
+                    <span>AI 안심 변환 & 번역하기</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 변환 결과 패널 */}
+            {(easyKoreanResult || translatedResult) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-blue-50/40 border border-blue-100 rounded-3xl p-5 shadow-sm">
+                  <div className="flex items-center space-x-2 text-blue-800 font-black text-xs mb-3">
+                    <span className="w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center text-[10px]">한</span>
+                    <span>어린이용 쉬운 한국어</span>
+                  </div>
+                  <div className="bg-white p-4 rounded-2xl border border-blue-100 text-slate-800 text-xs sm:text-sm font-bold min-h-[90px] leading-relaxed">
+                    {easyKoreanResult}
+                  </div>
+                </div>
+
+                <div className="bg-purple-50/40 border border-purple-100 rounded-3xl p-5 shadow-sm">
+                  <div className="flex items-center space-x-2 text-purple-800 font-black text-xs mb-3">
+                    <Languages className="w-4.5 h-4.5 text-purple-600" />
+                    <span>{langNames[selectedLang]} 대역 번역</span>
+                  </div>
+                  <div className="bg-white p-4 rounded-2xl border border-purple-100 text-slate-800 text-xs sm:text-sm font-bold min-h-[90px] leading-relaxed">
+                    {translatedResult}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* --- 탭 4: 학교 용어 사전 --- */}
+        {activeTab === 'dictionary' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center space-x-2.5 mb-2">
+                <span className="w-1.5 h-6 bg-green-500 rounded-full inline-block"></span>
+                <h2 className="text-lg font-black text-slate-900">AI 학교생활 교과서 용어 사전</h2>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed mb-6">
+                '모둠활동', '수행평가', '광합성' 등 일상 용어가 아닌 교과 과정 및 교육 행정 용어를 초등 눈높이로 해부하여 모국어와 함께 보여드립니다.
+              </p>
+
+              <div className="flex space-x-2 mb-4">
+                <input
+                  type="text"
+                  value={dictQuery}
+                  onChange={(e) => setDictQuery(e.target.value)}
+                  placeholder="단어를 적어보세요. 예) 수행평가, 급식실, 일체형"
+                  className="flex-1 p-3.5 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-400 text-xs sm:text-sm font-bold"
+                  onKeyDown={(e) => e.key === 'Enter' && handleDictionaryLookup()}
+                />
+                <button
+                  onClick={handleDictionaryLookup}
+                  disabled={loading || !dictQuery.trim()}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-black px-5 rounded-2xl text-xs flex items-center space-x-1.5 transition-all active:scale-95"
+                >
+                  {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  <span>검색</span>
+                </button>
+              </div>
+
+              {/* 백과사전 단어 카드 */}
+              {dictResult && (
+                <div className="bg-gradient-to-tr from-green-50/50 to-emerald-50/50 border border-green-100 rounded-3xl p-5 space-y-4 shadow-sm animate-fade-in">
+                  <div>
+                    <span className="bg-green-100 text-green-800 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">핵심 학교어휘</span>
+                    <h3 className="text-lg font-extrabold text-slate-800 mt-1.5">{dictResult.word}</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white p-4 rounded-2xl border border-green-100/40">
+                      <span className="text-[10px] text-slate-400 font-bold block mb-1">우리말 어린이용 설명</span>
+                      <p className="text-slate-800 text-xs sm:text-sm font-bold leading-relaxed">{dictResult.koreanExplanation}</p>
+                    </div>
+
+                    <div className="bg-white p-4 rounded-2xl border border-green-100/40">
+                      <span className="text-[10px] text-slate-400 font-bold block mb-1">{langNames[selectedLang]} 대역 설명</span>
+                      <p className="text-slate-700 text-xs sm:text-sm font-semibold leading-relaxed">{dictResult.translatedExplanation}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-emerald-800 text-emerald-50 p-4 rounded-2xl shadow-sm">
+                    <span className="text-[10px] text-emerald-300 font-black uppercase">학교 대화 속 활용 예시</span>
+                    <p className="text-xs sm:text-sm font-bold mt-1 leading-relaxed">" {dictResult.exampleSentence} "</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* --- 탭 5: 안산시 다문화 지원센터 가상 GPS 맵 --- */}
+        {activeTab === 'map' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2.5">
+                  <span className="w-1.5 h-6 bg-rose-500 rounded-full inline-block"></span>
+                  <h2 className="text-lg font-black text-slate-900">우리동네 다문화 복지 기관 맵</h2>
+                </div>
+                <button 
+                  onClick={requestMyLocation}
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-600 py-1.5 px-3 rounded-xl text-[10px] font-black flex items-center space-x-1 transition active:scale-95"
+                >
+                  <Compass className="w-3.5 h-3.5" />
+                  <span>실시간 내 GPS 수신</span>
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed mb-6">
+                현재 설정된 사용자 가상 좌표를 기점으로 안산시 다문화 가족 지원기관과의 하버사인 거리 순으로 자동 정렬 연계합니다.
+              </p>
+
+              {/* 목업 맵 컨테이너 */}
+              <div className="w-full h-64 bg-slate-100 rounded-3xl border border-slate-200/80 relative overflow-hidden flex items-center justify-center">
+                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '16px 16px' }}></div>
+                
+                {/* 현재 유저 좌표 핑 */}
+                <div className="absolute z-10 text-center" style={{ left: '50%', top: '48%' }}>
+                  <div className="relative">
+                    <span className="animate-ping absolute inline-flex h-5 w-5 rounded-full bg-blue-400 opacity-75"></span>
+                    <div className="w-5 h-5 bg-blue-600 border-2 border-white rounded-full relative flex items-center justify-center">
+                      <User className="w-3 h-3 text-white" />
+                    </div>
+                  </div>
+                  <span className="bg-blue-900 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow mt-1 inline-block">학생 위치</span>
+                </div>
+
+                {/* 지원센터 좌표 마커 배치 */}
+                {sortedCenters.map(center => {
+                  const xOffset = 50 + (center.lng - userLocation.lng) * 1600;
+                  const yOffset = 50 - (center.lat - userLocation.lat) * 1600;
+                  return (
+                    <div 
+                      key={center.id} 
+                      className="absolute group cursor-pointer"
+                      style={{ left: `${Math.min(90, Math.max(10, xOffset))}%`, top: `${Math.min(90, Math.max(10, yOffset))}%` }}
+                    >
+                      <MapPin className="w-7 h-7 text-rose-500 drop-shadow group-hover:text-rose-700 group-hover:scale-110 transition-all duration-200" />
+                      <span className="absolute -top-7 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow whitespace-nowrap opacity-80 group-hover:opacity-100 transition duration-150">
+                        {center.name} ({center.distance}km)
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 기관 리스트 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                {sortedCenters.map(center => (
+                  <div key={center.id} className="bg-slate-50/40 border border-slate-100 rounded-2xl p-4 flex flex-col justify-between hover:border-rose-200 transition">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="bg-rose-100 text-rose-800 text-[9px] font-black px-2 py-0.5 rounded-full">{center.type}</span>
+                        <span className="text-xs font-bold text-blue-600 flex items-center"><MapPin className="w-3.5 h-3.5 mr-0.5" />{center.distance} km</span>
+                      </div>
+                      <h4 className="font-extrabold text-slate-800 text-sm mt-2">{center.name}</h4>
+                      <p className="text-[11px] text-slate-500 mt-1">{center.address}</p>
+                      <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">{center.desc}</p>
+                    </div>
+
+                    <div className="border-t border-slate-200/50 mt-4 pt-3 flex justify-between items-center text-xs">
+                      <span className="font-bold text-slate-600 flex items-center">
+                        <Phone className="w-3.5 h-3.5 mr-1 text-slate-400" /> {center.phone}
+                      </span>
+                      <a 
+                        href={`tel:${center.phone}`}
+                        className="bg-white border border-slate-200 hover:border-slate-300 py-1 px-3 rounded-lg text-[10px] font-bold text-slate-700 transition"
+                      >
+                        전화하기
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- 탭 6: AI 담임선생님 일대일 학습 비서 --- */}
+        {activeTab === 'chat' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col min-h-[480px]">
+              <div className="border-b border-slate-100 pb-3 mb-4">
+                <div className="flex items-center space-x-2.5">
+                  <span className="w-1.5 h-6 bg-purple-500 rounded-full inline-block"></span>
+                  <h2 className="text-lg font-black text-slate-900">AI 학습 다정 멘토 챗봇</h2>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">우리 학교 규칙, 생활 예절, 준비물 누락 등 고민거리가 있다면 자상한 선생님에게 물어봐요.</p>
+              </div>
+
+              {/* 대화 히스토리 */}
+              <div className="flex-1 space-y-4 overflow-y-auto mb-4 p-3 bg-slate-50/50 rounded-2xl max-h-[310px]">
+                {chatHistory.map((msg, index) => (
+                  <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] rounded-2xl p-3.5 text-xs sm:text-sm ${
+                      msg.role === 'user'
+                        ? 'bg-purple-600 text-white rounded-br-none shadow-md shadow-purple-50'
+                        : 'bg-white border border-slate-100 text-slate-800 rounded-bl-none shadow-sm'
+                    }`}>
+                      {msg.role !== 'user' && (
+                        <div className="flex items-center space-x-1.5 mb-1 text-purple-600 font-extrabold text-[10px]">
+                          <Smile className="w-3.5 h-3.5" />
+                          <span>AI 담임 선생님</span>
+                        </div>
+                      )}
+                      <p className="leading-relaxed font-semibold">{msg.text}</p>
+                    </div>
+                  </div>
+                ))}
+                {loading && (
+                  <div className="flex justify-start">
+                    <div className="bg-white border border-slate-100 rounded-2xl rounded-bl-none p-3 text-xs text-slate-400 flex items-center space-x-2 shadow-sm">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>다정한 한글 답변을 정성껏 생각하고 있습니다...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 챗봇 입력창 */}
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="예: 선생님, 수행평가 기간을 어기면 점수가 많이 깎이나요? 모국어로도 질문 가능!"
+                  className="flex-1 p-3.5 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-purple-400 text-xs sm:text-sm font-semibold"
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={loading || !chatInput.trim()}
+                  className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white p-3.5 rounded-2xl transition active:scale-95"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- 탭 7: 교사용 알림장 오토파일럿 패키징 --- */}
+        {activeTab === 'teacher' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+              <span className="bg-indigo-50 text-indigo-700 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider inline-block mb-3">
+                School Bridge Autopilot for Teachers
+              </span>
+              <h2 className="text-xl font-black text-slate-950 mb-1">원클릭 다문화 공지사항 생성기</h2>
+              <p className="text-xs text-slate-400 leading-relaxed mb-6">
+                한국어로 쓰여진 공식적이고 길쭉한 원본 공지사항을 그대로 붙여넣으세요. AI가 학부모 전달용 3줄 요약, 다문화용 쉬운 한국어 한 문장, 그리고 타깃 다국어 번역을 원클릭 패키징 완료해줍니다.
+              </p>
+
+              <div className="space-y-4">
+                <textarea
+                  value={teacherNotice}
+                  onChange={(e) => setTeacherNotice(e.target.value)}
+                  placeholder="예시: 2학기 현장체험학습에 관하여 사전 안내해 드립니다. 일시는 10월 12일이며 준비물은 개인 도시락 및 필기도구입니다. 불참하는 학생들은 대체 자율 자습반에서 학습을 정상 이수해야 하오니 참석 여부 회신서를 제출 바랍니다."
+                  className="w-full min-h-[120px] p-4 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-400 text-sm font-semibold text-slate-700"
+                />
+
+                <div className="flex justify-between items-center flex-wrap gap-2">
+                  <span className="text-xs text-slate-500 font-bold">배포 대상 언어: <strong className="text-indigo-600">{langNames[selectedLang]}</strong></span>
+                  <button
+                    onClick={handleTeacherCompile}
+                    disabled={loading || !teacherNotice.trim()}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-200 text-white font-black py-2.5 px-6 rounded-xl text-xs flex items-center space-x-1.5 transition active:scale-95 shadow-md shadow-indigo-100"
+                  >
+                    {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4.5 h-4.5" />}
+                    <span>AI 공지 일괄 패키징 발행</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 컴파일 결과 패널 */}
+              {compiledNotice && (
+                <div className="mt-8 border-t border-indigo-100 pt-6 space-y-5 animate-fade-in">
+                  <div className="bg-indigo-50/40 p-4 rounded-2xl border border-indigo-100/50">
+                    <span className="text-[9px] font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full uppercase">생성된 통합 공지 제목</span>
+                    <h3 className="text-base font-extrabold text-slate-800 mt-2">{compiledNotice.title}</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm">
+                      <span className="text-[10px] text-blue-600 font-black block mb-2">1. 다정한 아동용 한글</span>
+                      <p className="text-xs text-slate-700 leading-relaxed font-bold">{compiledNotice.simplified}</p>
+                    </div>
+
+                    <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm">
+                      <span className="text-[10px] text-amber-600 font-black block mb-2">2. 학부모 전달용 3줄 요약</span>
+                      <p className="text-xs text-slate-700 leading-relaxed font-semibold whitespace-pre-line">{compiledNotice.summary}</p>
+                    </div>
+
+                    <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm">
+                      <span className="text-[10px] text-purple-600 font-black block mb-2">3. {langNames[selectedLang]} 완벽 대역</span>
+                      <p className="text-xs text-slate-700 leading-relaxed font-semibold">{compiledNotice.translated}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-emerald-50 border border-emerald-150 p-4 rounded-2xl text-emerald-800 text-xs flex items-center space-x-2">
+                    <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                    <p className="font-bold">발행 완료! 방금 컴파일된 공지사항이 메인 알림장 피드 대시보드(홈)에 실시간으로 등록 및 연동되었습니다.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+      </main>
+
+      {/* --- 글로벌 모바일 스타일 네비게이션 플로팅 바 --- */}
+      <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 shadow-2xl z-40 transition duration-300">
+        <div className="max-w-md mx-auto px-2 py-2 flex justify-around items-center">
+          <button 
+            onClick={() => setActiveTab('home')}
+            className={`flex flex-col items-center space-y-1 py-1.5 px-3 rounded-2xl transition-all ${activeTab === 'home' ? 'text-blue-600 font-extrabold scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <Compass className="w-5 h-5" />
+            <span className="text-[9px]">알림장</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('demographics')}
+            className={`flex flex-col items-center space-y-1 py-1.5 px-3 rounded-2xl transition-all ${activeTab === 'demographics' ? 'text-blue-600 font-extrabold scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <TrendingUp className="w-5 h-5" />
+            <span className="text-[9px]">공공데이터</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('translate')}
+            className={`flex flex-col items-center space-y-1 py-1.5 px-3 rounded-2xl transition-all ${activeTab === 'translate' ? 'text-blue-600 font-extrabold scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <Languages className="w-5 h-5" />
+            <span className="text-[9px]">안심번역</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('dictionary')}
+            className={`flex flex-col items-center space-y-1 py-1.5 px-3 rounded-2xl transition-all ${activeTab === 'dictionary' ? 'text-blue-600 font-extrabold scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <BookMarked className="w-5 h-5" />
+            <span className="text-[9px]">용어사전</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('chat')}
+            className={`flex flex-col items-center space-y-1 py-1.5 px-3 rounded-2xl transition-all ${activeTab === 'chat' ? 'text-blue-600 font-extrabold scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <MessageSquare className="w-5 h-5" />
+            <span className="text-[9px]">학습도우미</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('map')}
+            className={`flex flex-col items-center space-y-1 py-1.5 px-3 rounded-2xl transition-all ${activeTab === 'map' ? 'text-blue-600 font-extrabold scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <MapPin className="w-5 h-5" />
+            <span className="text-[9px]">지원기관</span>
+          </button>
+        </div>
+      </footer>
+
+      {/* --- API KEY 입력 모달 설정 창 --- */}
+      {isApiKeyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 transform scale-100 transition-all">
+            <div className="flex items-center space-x-2 text-rose-500 mb-3">
+              <Sparkles className="w-5 h-5" />
+              <h3 className="font-black text-slate-800 text-base">Gemini API Key 등록</h3>
+            </div>
+            
+            <p className="text-xs text-slate-400 leading-relaxed mb-4">
+              본 서비스는 실시간 인공지능 번역 및 교사 자동 요약을 수행합니다. 개인 Gemini API 키를 저장해 안전하게 브라우저 로컬에서 작동합니다.
+            </p>
+
+            <input
+              type="password"
+              placeholder="AIzaSy..."
+              value={tempApiKey}
+              onChange={(e) => setTempApiKey(e.target.value)}
+              className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-mono mb-4"
+            />
+
+            <div className="flex space-x-2 text-xs font-bold">
+              <button
+                onClick={() => setIsApiKeyModalOpen(false)}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-2.5 rounded-xl transition"
+              >
+                닫기
+              </button>
+              <button
+                onClick={() => {
+                  setApiKey(tempApiKey);
+                  setIsApiKeyModalOpen(false);
+                }}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl transition"
+              >
+                적용하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
